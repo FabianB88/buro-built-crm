@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
-  const { signIn } = useAuth()
+  const { signIn, accessDenied } = useAuth()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -75,7 +75,18 @@ export default function Login() {
           {loading ? 'Aanmelden...' : 'Aanmelden met Google'}
         </button>
 
-        {error && (
+        {accessDenied && (
+          <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#fde8e8', border: '1px solid #f5c0c0', borderRadius: '8px' }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--color-danger)', textAlign: 'center', margin: 0, fontWeight: 500 }}>
+              Geen toegang
+            </p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-danger)', textAlign: 'center', margin: '4px 0 0', opacity: 0.8 }}>
+              Dit e-mailadres is niet toegevoegd door een beheerder.
+            </p>
+          </div>
+        )}
+
+        {error && !accessDenied && (
           <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--color-danger)', textAlign: 'center' }}>
             {error}
           </p>
