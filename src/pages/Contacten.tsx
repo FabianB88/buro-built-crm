@@ -10,7 +10,9 @@ import Badge from '../components/ui/Badge'
 import EmptyState from '../components/ui/EmptyState'
 import PageHeader from '../components/ui/PageHeader'
 import SearchBar from '../components/ui/SearchBar'
-import { Plus, Pencil, Trash2, Users, Mail, Phone, Building2, X, Tag } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { exportToCsv } from '../utils/exportCsv'
+import { Plus, Pencil, Trash2, Users, Mail, Phone, Building2, X, Download, Eye } from 'lucide-react'
 
 const CATEGORIE_BADGE: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'accent'> = {
   klant: 'success',
@@ -78,6 +80,7 @@ function TagInput({ tags, onChange }: { tags: string[], onChange: (tags: string[
 }
 
 export default function Contacten() {
+  const navigate = useNavigate()
   const [contacts, setContacts] = useState<Contact[]>([])
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('')
@@ -166,7 +169,15 @@ export default function Contacten() {
       <PageHeader
         title="Contacten"
         subtitle={`${contacts.length} contacten`}
-        action={<Button onClick={openAdd}><Plus size={15} /> Nieuw contact</Button>}
+        action={
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="ghost" size="sm" onClick={() => exportToCsv('contacten.csv',
+              ['Naam', 'E-mail', 'Telefoon', 'Bedrijf', 'Functie', 'Categorie', 'Tags', 'Branche', 'Regio', 'Website', 'Notitie'],
+              filtered.map(c => [c.naam, c.email, c.telefoon, c.bedrijf, c.functie, c.categorie, (c.tags || []).join('; '), c.branche, c.regio, c.website, c.notitie])
+            )}><Download size={14} /> Export</Button>
+            <Button onClick={openAdd}><Plus size={15} /> Nieuw contact</Button>
+          </div>
+        }
       />
 
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -265,6 +276,7 @@ export default function Contacten() {
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/contacten/${c.id}`)}><Eye size={13} /></Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(c)}><Pencil size={13} /></Button>
                       <Button variant="danger" size="sm" onClick={() => setDeleteId(c.id!)}><Trash2 size={13} /></Button>
                     </div>

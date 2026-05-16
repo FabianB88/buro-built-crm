@@ -3,6 +3,7 @@ import { subscribeTasks, addTask, updateTask, deleteTask } from '../services/tas
 import { subscribeProjects } from '../services/projects'
 import { subscribeContacts } from '../services/contacts'
 import { subscribeAllowedUsers, AllowedUser } from '../services/allowedUsers'
+import { exportToCsv } from '../utils/exportCsv'
 import { Task, Project, Contact } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import Button from '../components/ui/Button'
@@ -14,7 +15,7 @@ import Badge from '../components/ui/Badge'
 import EmptyState from '../components/ui/EmptyState'
 import PageHeader from '../components/ui/PageHeader'
 import SearchBar from '../components/ui/SearchBar'
-import { CheckSquare, Pencil, Trash2, Plus, User } from 'lucide-react'
+import { CheckSquare, Pencil, Trash2, Plus, User, Download, Archive } from 'lucide-react'
 
 type StatusVariant = 'default' | 'accent' | 'success'
 
@@ -59,6 +60,7 @@ export default function Taken() {
   const [statusFilter, setStatusFilter] = useState('alle')
   const [prioriteitFilter, setPrioriteitFilter] = useState('alle')
   const [mijnTaken, setMijnTaken] = useState(false)
+  const [toonAfgerond, setToonAfgerond] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm())
@@ -78,6 +80,7 @@ export default function Taken() {
 
   const filtered = useMemo(() => {
     return tasks.filter(t => {
+      if (!toonAfgerond && t.status === 'done') return false
       if (mijnTaken && t.toegewezenAanEmail !== profile?.email) return false
       const matchSearch =
         t.titel.toLowerCase().includes(search.toLowerCase()) ||
@@ -175,7 +178,15 @@ export default function Taken() {
       <PageHeader
         title="Taken"
         subtitle={`${tasks.filter(t => t.status !== 'done').length} open`}
-        action={<Button onClick={openAdd}><Plus size={15} /> Nieuwe taak</Button>}
+        action={
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="ghost" size="sm" onClick={() => exportToCsv('taken.csv',
+              ['Titel', 'Status', 'Prioriteit', 'Deadline', 'Toegewezen aan', 'Project', 'Contact', 'Omschrijving'],
+              tasks.map(t => [t.titel, t.status, t.prioriteit, t.deadline, t.toegewezenAan, t.projectNaam, t.contactNaam, t.omschrijving])
+            )}><Download size={14} /> Export</Button>
+            <Button onClick={openAdd}><Plus size={15} /> Nieuwe taak</Button>
+          </div>
+        }
       />
 
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -206,6 +217,21 @@ export default function Taken() {
         >
           <User size={13} />
           Mijn taken {myCount > 0 && `(${myCount})`}
+        </button>
+        <button
+          onClick={() => setToonAfgerond(!toonAfgerond)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '0.45rem 0.875rem', borderRadius: '7px', fontSize: '0.82rem', fontWeight: 500,
+            cursor: 'pointer', border: '1.5px solid',
+            borderColor: toonAfgerond ? 'var(--color-primary)' : 'var(--color-border)',
+            background: toonAfgerond ? 'var(--color-primary)' : 'transparent',
+            color: toonAfgerond ? '#fff' : 'var(--color-text-muted)',
+            transition: 'all 0.15s',
+          }}
+        >
+          <Archive size={13} />
+          {toonAfgerond ? 'Verberg afgerond' : 'Toon afgerond'}
         </button>
       </div>
 

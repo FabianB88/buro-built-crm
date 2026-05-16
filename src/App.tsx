@@ -10,6 +10,7 @@ import Projecten from './pages/Projecten'
 import Taken from './pages/Taken'
 import Notities from './pages/Notities'
 import Instellingen from './pages/Instellingen'
+import ContactDetail from './pages/ContactDetail'
 
 function ProtectedApp() {
   return (
@@ -18,6 +19,7 @@ function ProtectedApp() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/contacten" element={<Contacten />} />
+        <Route path="/contacten/:id" element={<ContactDetail />} />
         <Route path="/organisaties" element={<Organisaties />} />
         <Route path="/opdrachtgevers" element={<Opdrachtgevers />} />
         <Route path="/projecten" element={<Projecten />} />

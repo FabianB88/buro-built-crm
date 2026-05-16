@@ -90,6 +90,17 @@ export interface Note {
   aangemaaktOp: number
 }
 
+export interface Interaction {
+  id?: string
+  contactId: string
+  contactNaam?: string
+  type: 'call' | 'email' | 'meeting' | 'overig'
+  datum: string
+  notitie?: string
+  auteur: string
+  aangemaaktOp: number
+}
+
 export interface UserProfile {
   uid: string
   naam: string
