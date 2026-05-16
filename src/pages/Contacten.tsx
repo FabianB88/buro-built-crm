@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, KeyboardEvent } from 'react'
+import { useEffect, useState, useMemo, KeyboardEvent, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import { subscribeContacts, addContact, updateContact, deleteContact } from '../services/contacts'
 import { Contact } from '../types'
 import Button from '../components/ui/Button'
@@ -12,7 +13,80 @@ import PageHeader from '../components/ui/PageHeader'
 import SearchBar from '../components/ui/SearchBar'
 import { useNavigate } from 'react-router-dom'
 import { exportToCsv } from '../utils/exportCsv'
-import { Plus, Pencil, Trash2, Users, Mail, Phone, Building2, X, Download, Eye } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users, Mail, Phone, Building2, X, Download, Eye, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
+
+// Maps any reasonable header spelling → Contact field
+const HEADER_MAP: Record<string, keyof FormState> = {
+  naam: 'naam', name: 'naam', voornaam: 'naam', fullname: 'naam', 'volledige naam': 'naam',
+  email: 'email', 'e-mail': 'email', mail: 'email', emailadres: 'email',
+  telefoon: 'telefoon', phone: 'telefoon', tel: 'telefoon', mobiel: 'telefoon', gsm: 'telefoon',
+  bedrijf: 'bedrijf', company: 'bedrijf', organisatie: 'bedrijf', werkgever: 'bedrijf', 'bedrijfsnaam': 'bedrijf',
+  functie: 'functie', role: 'functie', titel: 'functie', title: 'functie', job: 'functie', functietitel: 'functie',
+  categorie: 'categorie', category: 'categorie', type: 'categorie',
+  tags: 'tags', tag: 'tags', labels: 'tags',
+  website: 'website', url: 'website', site: 'website',
+  branche: 'branche', sector: 'branche', industry: 'branche', industrie: 'branche',
+  regio: 'regio', region: 'regio', stad: 'regio', city: 'regio', locatie: 'regio', plaats: 'regio',
+  notitie: 'notitie', note: 'notitie', notes: 'notitie', opmerkingen: 'notitie', opmerking: 'notitie',
+}
+
+const VALID_CATEGORIES = new Set(['klant', 'netwerk', 'leverancier', 'overig'])
+
+function normalizeHeader(h: string): string {
+  return h.toLowerCase().trim().replace(/[^a-z\s-]/g, '')
+}
+
+function parseExcel(file: File): Promise<FormState[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target!.result as ArrayBuffer)
+        const wb = XLSX.read(data, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+        if (rows.length === 0) { resolve([]); return }
+
+        // Build header mapping from actual column names
+        const firstRow = rows[0]
+        const colMap: Record<string, keyof FormState> = {}
+        for (const col of Object.keys(firstRow)) {
+          const normalized = normalizeHeader(col)
+          const field = HEADER_MAP[normalized]
+          if (field) colMap[col] = field
+        }
+
+        const contacts: FormState[] = rows.map((row, idx) => {
+          const c: FormState = {
+            naam: '', email: '', telefoon: '', bedrijf: '', functie: '',
+            categorie: 'klant', tags: [], website: '', branche: '', regio: '', notitie: '',
+          }
+          for (const [col, field] of Object.entries(colMap)) {
+            const raw = String(row[col] ?? '').trim()
+            if (field === 'tags') {
+              c.tags = raw ? raw.split(/[,;|]/).map(t => t.trim().toLowerCase()).filter(Boolean) : []
+            } else if (field === 'categorie') {
+              const val = raw.toLowerCase()
+              c.categorie = VALID_CATEGORIES.has(val) ? val as Contact['categorie'] : 'klant'
+            } else {
+              (c as Record<string, unknown>)[field] = raw
+            }
+          }
+          // Placeholder for missing naam
+          if (!c.naam) c.naam = `(Geen naam — rij ${idx + 2})`
+          return c
+        })
+
+        resolve(contacts)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsArrayBuffer(file)
+  })
+}
 
 const CATEGORIE_BADGE: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'accent'> = {
   klant: 'success',
@@ -81,6 +155,7 @@ function TagInput({ tags, onChange }: { tags: string[], onChange: (tags: string[
 
 export default function Contacten() {
   const navigate = useNavigate()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('')
@@ -91,6 +166,12 @@ export default function Contacten() {
   const [form, setForm] = useState<FormState>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Import state
+  const [importPreview, setImportPreview] = useState<FormState[] | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importDone, setImportDone] = useState<{ added: number } | null>(null)
+  const [importError, setImportError] = useState('')
 
   useEffect(() => subscribeContacts(setContacts), [])
 
@@ -164,6 +245,42 @@ export default function Contacten() {
   const f = <K extends keyof FormState>(field: K, value: FormState[K]) =>
     setForm(prev => ({ ...prev, [field]: value }))
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setImportError('')
+    setImportDone(null)
+    try {
+      const rows = await parseExcel(file)
+      if (rows.length === 0) { setImportError('Het bestand bevat geen rijen.'); return }
+      setImportPreview(rows)
+    } catch {
+      setImportError('Bestand kon niet worden gelezen. Controleer of het een geldig Excel-bestand (.xlsx) is.')
+    }
+  }
+
+  const handleImport = async () => {
+    if (!importPreview) return
+    setImporting(true)
+    setImportError('')
+    let added = 0
+    try {
+      const now = Date.now()
+      for (const row of importPreview) {
+        await addContact({ ...row, aangemaaktOp: now + added, bijgewerktOp: now + added })
+        added++
+      }
+      setImportDone({ added })
+      setImportPreview(null)
+    } catch (e) {
+      console.error(e)
+      setImportError(`Import gestopt na ${added} contacten. Controleer je verbinding en probeer opnieuw.`)
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -171,6 +288,8 @@ export default function Contacten() {
         subtitle={`${contacts.length} contacten`}
         action={
           <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleFileChange} />
+            <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import Excel</Button>
             <Button variant="ghost" size="sm" onClick={() => exportToCsv('contacten.csv',
               ['Naam', 'E-mail', 'Telefoon', 'Bedrijf', 'Functie', 'Categorie', 'Tags', 'Branche', 'Regio', 'Website', 'Notitie'],
               filtered.map(c => [c.naam, c.email, c.telefoon, c.bedrijf, c.functie, c.categorie, (c.tags || []).join('; '), c.branche, c.regio, c.website, c.notitie])
@@ -349,6 +468,87 @@ export default function Contacten() {
         <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
           Weet je zeker dat je dit contact wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
         </p>
+      </Modal>
+
+      {/* Import error toast */}
+      {importError && (
+        <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', background: '#fde8e8', border: '1px solid #f5c0c0', borderRadius: '9px', padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.625rem', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', zIndex: 300, maxWidth: '480px' }}>
+          <AlertCircle size={15} style={{ color: 'var(--color-danger)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.82rem', color: 'var(--color-danger)' }}>{importError}</span>
+          <button onClick={() => setImportError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '0.5rem', color: 'var(--color-danger)', display: 'flex' }}><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Import success toast */}
+      {importDone && (
+        <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', background: '#dcf0e6', border: '1px solid #a8d5bc', borderRadius: '9px', padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.625rem', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', zIndex: 300 }}>
+          <CheckCircle2 size={15} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.82rem', color: 'var(--color-success)', fontWeight: 500 }}>{importDone.added} contacten succesvol geïmporteerd.</span>
+          <button onClick={() => setImportDone(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '0.5rem', color: 'var(--color-success)', display: 'flex' }}><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Import preview modal */}
+      <Modal
+        open={!!importPreview}
+        onClose={() => { setImportPreview(null); setImportError('') }}
+        title={`Import — ${importPreview?.length ?? 0} contacten gevonden`}
+        width={600}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setImportPreview(null)}>Annuleren</Button>
+            <Button onClick={handleImport} disabled={importing}>
+              {importing ? `Importeren...` : `${importPreview?.length ?? 0} contacten importeren`}
+            </Button>
+          </>
+        }
+      >
+        <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', margin: 0 }}>
+          Controleer de gegevens hieronder. Lege velden worden overgeslagen. Namen die ontbreken krijgen een tijdelijke plaatshouder.
+        </p>
+
+        {/* Warnings */}
+        {(importPreview || []).some(r => r.naam.startsWith('(Geen naam')) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.875rem', background: '#fdf0d9', border: '1px solid #e8c97a', borderRadius: '7px', fontSize: '0.8rem', color: 'var(--color-warning)' }}>
+            <AlertCircle size={14} style={{ flexShrink: 0 }} />
+            {(importPreview || []).filter(r => r.naam.startsWith('(Geen naam')).length} rij(en) hebben geen naam en krijgen een tijdelijke plaatshouder. Je kunt ze achteraf bewerken.
+          </div>
+        )}
+
+        {/* Preview table */}
+        <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+            <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface-muted)', zIndex: 1 }}>
+              <tr>
+                {['#', 'Naam', 'E-mail', 'Telefoon', 'Bedrijf', 'Categorie'].map(h => (
+                  <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(importPreview || []).map((row, i) => (
+                <tr key={i} style={{ borderBottom: i < (importPreview!.length - 1) ? '1px solid var(--color-border)' : 'none', background: row.naam.startsWith('(Geen naam') ? '#fdf9f0' : 'transparent' }}>
+                  <td style={{ padding: '0.45rem 0.75rem', color: 'var(--color-text-muted)' }}>{i + 1}</td>
+                  <td style={{ padding: '0.45rem 0.75rem', fontWeight: row.naam.startsWith('(Geen naam') ? 400 : 500, color: row.naam.startsWith('(Geen naam') ? 'var(--color-text-muted)' : 'var(--color-text)', fontStyle: row.naam.startsWith('(Geen naam') ? 'italic' : 'normal' }}>
+                    {row.naam}
+                  </td>
+                  <td style={{ padding: '0.45rem 0.75rem', color: 'var(--color-text-muted)' }}>{row.email || '—'}</td>
+                  <td style={{ padding: '0.45rem 0.75rem', color: 'var(--color-text-muted)' }}>{row.telefoon || '—'}</td>
+                  <td style={{ padding: '0.45rem 0.75rem', color: 'var(--color-text-muted)' }}>{row.bedrijf || '—'}</td>
+                  <td style={{ padding: '0.45rem 0.75rem' }}>
+                    <Badge variant={CATEGORIE_BADGE[row.categorie] || 'default'}>{row.categorie}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {importError && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--color-danger)' }}>
+            <AlertCircle size={14} /> {importError}
+          </div>
+        )}
       </Modal>
     </div>
   )
