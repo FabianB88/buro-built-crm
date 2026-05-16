@@ -11,6 +11,9 @@ export interface Contact {
   branche?: string
   regio?: string
   notitie?: string
+  accountManager?: string       // email
+  accountManagerNaam?: string   // display name
+  volgendContactmoment?: string // YYYY-MM-DD
   aangemaaktOp: number
   bijgewerktOp: number
 }

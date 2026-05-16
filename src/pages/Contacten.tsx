@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo, KeyboardEvent, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { subscribeContacts, addContact, updateContact, deleteContact } from '../services/contacts'
+import { addTask } from '../services/tasks'
+import { subscribeAllowedUsers, AllowedUser } from '../services/allowedUsers'
 import { Contact } from '../types'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -13,7 +15,22 @@ import PageHeader from '../components/ui/PageHeader'
 import SearchBar from '../components/ui/SearchBar'
 import { useNavigate } from 'react-router-dom'
 import { exportToCsv } from '../utils/exportCsv'
-import { Plus, Pencil, Trash2, Users, Mail, Phone, Building2, X, Download, Eye, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users, Mail, Phone, Building2, X, Download, Eye, Upload, AlertCircle, CheckCircle2, Calendar, UserCheck } from 'lucide-react'
+
+function dateInMonths(n: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() + n)
+  return d.toISOString().split('T')[0]
+}
+
+function dateMinusDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr)
+  d.setDate(d.getDate() - days)
+  // clamp to today
+  const today = new Date().toISOString().split('T')[0]
+  const result = d.toISOString().split('T')[0]
+  return result < today ? today : result
+}
 
 // Maps any reasonable header spelling → Contact field
 const HEADER_MAP: Record<string, keyof FormState> = {
@@ -100,6 +117,7 @@ type FormState = Omit<Contact, 'id' | 'aangemaaktOp' | 'bijgewerktOp'>
 const emptyForm = (): FormState => ({
   naam: '', email: '', telefoon: '', bedrijf: '', functie: '',
   categorie: 'klant', tags: [], website: '', branche: '', regio: '', notitie: '',
+  accountManager: '', accountManagerNaam: '', volgendContactmoment: '',
 })
 
 function TagInput({ tags, onChange }: { tags: string[], onChange: (tags: string[]) => void }) {
@@ -166,6 +184,8 @@ export default function Contacten() {
   const [form, setForm] = useState<FormState>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [users, setUsers] = useState<AllowedUser[]>([])
+  const [maakFollowUp, setMaakFollowUp] = useState(true)
 
   // Import state
   const [importPreview, setImportPreview] = useState<FormState[] | null>(null)
@@ -174,6 +194,7 @@ export default function Contacten() {
   const [importError, setImportError] = useState('')
 
   useEffect(() => subscribeContacts(setContacts), [])
+  useEffect(() => subscribeAllowedUsers(setUsers), [])
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
@@ -197,7 +218,11 @@ export default function Contacten() {
     return list
   }, [contacts, search, filterCat, filterTag])
 
-  const openAdd = () => { setEditing(null); setForm(emptyForm()); setError(''); setModalOpen(true) }
+  const openAdd = () => {
+    setEditing(null); setForm(emptyForm()); setError('')
+    setMaakFollowUp(true)
+    setModalOpen(true)
+  }
   const openEdit = (c: Contact) => {
     setEditing(c)
     setForm({
@@ -206,8 +231,12 @@ export default function Contacten() {
       categorie: c.categorie, tags: c.tags || [],
       website: c.website || '', branche: c.branche || '',
       regio: c.regio || '', notitie: c.notitie || '',
+      accountManager: c.accountManager || '',
+      accountManagerNaam: c.accountManagerNaam || '',
+      volgendContactmoment: c.volgendContactmoment || '',
     })
     setError('')
+    setMaakFollowUp(false)
     setModalOpen(true)
   }
 
@@ -217,11 +246,38 @@ export default function Contacten() {
     setError('')
     try {
       const now = Date.now()
+      let contactId: string | undefined = editing?.id
       if (editing?.id) {
         await updateContact(editing.id, { ...form, bijgewerktOp: now })
       } else {
-        await addContact({ ...form, aangemaaktOp: now, bijgewerktOp: now })
+        contactId = await addContact({ ...form, aangemaaktOp: now, bijgewerktOp: now })
       }
+
+      // Auto follow-up task
+      if (maakFollowUp && form.accountManager) {
+        const deadline = form.volgendContactmoment
+          ? dateMinusDays(form.volgendContactmoment as string, 14)
+          : dateInMonths(3)
+        const contactDate = form.volgendContactmoment
+          ? ` (gepland: ${form.volgendContactmoment})`
+          : ' (geen datum ingesteld)'
+        await addTask({
+          titel: `Contact opnemen: ${form.naam}`,
+          omschrijving: `Follow-up contact met ${form.naam}${contactDate}`,
+          status: 'open',
+          prioriteit: 'normaal',
+          deadline,
+          toegewezenAan: form.accountManagerNaam as string || (form.accountManager as string).split('@')[0],
+          toegewezenAanEmail: form.accountManager as string,
+          contactId,
+          contactNaam: form.naam,
+          projectId: '',
+          projectNaam: '',
+          aangemaaktOp: now,
+          bijgewerktOp: now,
+        })
+      }
+
       setModalOpen(false)
     } catch (e) {
       console.error(e)
@@ -451,6 +507,73 @@ export default function Contacten() {
           <div style={{ gridColumn: '1 / -1' }}>
             <Textarea label="Notitie" value={form.notitie as string} onChange={e => f('notitie', e.target.value)} placeholder="Extra informatie..." />
           </div>
+
+          {/* Accountmanager + follow-up */}
+          <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: '0.875rem' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.625rem' }}>
+              Opvolging
+            </div>
+          </div>
+          <Input
+            label="Volgend contactmoment"
+            type="date"
+            value={form.volgendContactmoment as string}
+            onChange={e => f('volgendContactmoment', e.target.value)}
+          />
+          <div />
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+              Accountmanager
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => { f('accountManager', ''); f('accountManagerNaam', '') }}
+                style={{
+                  padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem',
+                  cursor: 'pointer', border: '1.5px solid',
+                  borderColor: !form.accountManager ? 'var(--color-primary)' : 'var(--color-border)',
+                  background: !form.accountManager ? 'var(--color-primary)' : 'transparent',
+                  color: !form.accountManager ? '#fff' : 'var(--color-text-muted)',
+                }}
+              >
+                Niemand
+              </button>
+              {users.map(u => (
+                <button
+                  key={u.email}
+                  type="button"
+                  onClick={() => { f('accountManager', u.email); f('accountManagerNaam', u.email.split('@')[0]) }}
+                  style={{
+                    padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem',
+                    cursor: 'pointer', border: '1.5px solid', fontWeight: form.accountManager === u.email ? 600 : 400,
+                    borderColor: form.accountManager === u.email ? 'var(--color-primary)' : 'var(--color-border)',
+                    background: form.accountManager === u.email ? 'var(--color-primary)' : 'transparent',
+                    color: form.accountManager === u.email ? '#fff' : 'var(--color-text-muted)',
+                  }}
+                >
+                  {u.email.split('@')[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.accountManager && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', color: 'var(--color-text-muted)', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={maakFollowUp}
+                  onChange={e => setMaakFollowUp(e.target.checked)}
+                  style={{ accentColor: 'var(--color-primary)', width: 15, height: 15 }}
+                />
+                {editing
+                  ? 'Maak nieuwe follow-up taak aan voor de accountmanager'
+                  : `Automatisch follow-up taak aanmaken${form.volgendContactmoment ? ` (herinnering 2 weken voor ${form.volgendContactmoment})` : ' (over 3 maanden)'}`
+                }
+              </label>
+            </div>
+          )}
         </div>
       </Modal>
 

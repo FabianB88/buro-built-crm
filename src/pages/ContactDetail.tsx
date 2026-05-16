@@ -14,7 +14,7 @@ import Modal from '../components/ui/Modal'
 import Badge from '../components/ui/Badge'
 import {
   ArrowLeft, Mail, Phone, Globe, Building2, MapPin, Tag,
-  StickyNote, CheckSquare, PhoneCall, AtSign, Users, Plus, Trash2, Pencil
+  StickyNote, CheckSquare, PhoneCall, AtSign, Users, Plus, Trash2, Calendar, UserCheck
 } from 'lucide-react'
 
 const CATEGORIE_BADGE: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'accent'> = {
@@ -202,6 +202,20 @@ export default function ContactDetail() {
               {contact.branche && (
                 <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', paddingLeft: '21px' }}>
                   {contact.branche}
+                </div>
+              )}
+              {contact.volgendContactmoment && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', marginTop: '0.25rem' }}>
+                  <Calendar size={13} style={{ flexShrink: 0, color: contact.volgendContactmoment < new Date().toISOString().split('T')[0] ? 'var(--color-danger)' : 'var(--color-accent)' }} />
+                  <span style={{ fontWeight: 500, color: contact.volgendContactmoment < new Date().toISOString().split('T')[0] ? 'var(--color-danger)' : 'var(--color-text)' }}>
+                    Volgend contact: {contact.volgendContactmoment}
+                  </span>
+                </div>
+              )}
+              {contact.accountManagerNaam && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem' }}>
+                  <UserCheck size={13} style={{ flexShrink: 0, color: 'var(--color-text-muted)' }} />
+                  <span style={{ color: 'var(--color-text-muted)' }}>Accountmanager: <strong>{contact.accountManagerNaam}</strong></span>
                 </div>
               )}
             </div>

@@ -6,7 +6,7 @@ import { subscribeClients } from '../services/clients'
 import { Contact, Project, Task, Client } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Users, FolderKanban, CheckSquare, Briefcase, ArrowRight, ListTodo, AlertCircle } from 'lucide-react'
+import { Users, FolderKanban, CheckSquare, Briefcase, ArrowRight, AlertCircle, Calendar } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 
 const PRIO_COLOR: Record<string, string> = {
@@ -81,6 +81,17 @@ export default function Dashboard() {
   const myOpenTasks = tasks.filter(t => t.toegewezenAanEmail === profile?.email && t.status !== 'done')
   const myOverdue = myOpenTasks.filter(t => t.deadline && t.deadline < today)
   const myProjects = projects.filter(p => (p.teamleden || []).includes(profile?.email || ''))
+
+  // Mijn contacten (where current user is accountmanager), sorted by volgend contactmoment
+  const myContacts = contacts
+    .filter(c => c.accountManager === profile?.email)
+    .sort((a, b) => {
+      if (a.volgendContactmoment && b.volgendContactmoment)
+        return a.volgendContactmoment > b.volgendContactmoment ? 1 : -1
+      if (a.volgendContactmoment) return -1
+      if (b.volgendContactmoment) return 1
+      return 0
+    })
 
   // Sorted for display
   const myTasksSorted = [...myOpenTasks].sort((a, b) => {
@@ -232,30 +243,53 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        {/* Recente contacten */}
-        <Panel title="Recente contacten" subtitle="" linkTo="/contacten" linkLabel="Alle contacten">
-          {contacts.length === 0 ? (
-            <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>Nog geen contacten.</p>
+        {/* Mijn contacten — accountmanager view */}
+        <Panel
+          title="Mijn contacten"
+          subtitle={myContacts.length > 0 ? `${myContacts.length} contact${myContacts.length !== 1 ? 'en' : ''} in beheer` : undefined}
+          linkTo="/contacten"
+          linkLabel="Alle contacten"
+        >
+          {myContacts.length === 0 ? (
+            <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+              {contacts.length === 0
+                ? 'Nog geen contacten aangemaakt.'
+                : 'Geen contacten met jou als accountmanager.'}
+            </p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {contacts.slice(0, 5).map(c => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', padding: '0.4rem 0.625rem', borderRadius: '7px' }}
-                  onClick={() => navigate(`/contacten/${c.id}`)}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-background)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-surface-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                    {c.naam.charAt(0).toUpperCase()}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {myContacts.slice(0, 6).map(c => {
+                const overdue = c.volgendContactmoment && c.volgendContactmoment < today
+                const soon = c.volgendContactmoment && !overdue &&
+                  c.volgendContactmoment <= new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => navigate(`/contacten/${c.id}`)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.625rem', borderRadius: '7px', cursor: 'pointer', background: overdue ? 'rgba(180,83,83,0.05)' : 'transparent' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = overdue ? 'rgba(180,83,83,0.08)' : 'var(--color-background)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = overdue ? 'rgba(180,83,83,0.05)' : 'transparent')}
+                  >
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-surface-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                      {c.naam.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.naam}</div>
+                      {c.bedrijf && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.bedrijf}</div>}
+                    </div>
+                    {c.volgendContactmoment ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                        <Calendar size={11} style={{ color: overdue ? 'var(--color-danger)' : soon ? 'var(--color-warning)' : 'var(--color-text-muted)' }} />
+                        <span style={{ fontSize: '0.72rem', color: overdue ? 'var(--color-danger)' : soon ? 'var(--color-warning)' : 'var(--color-text-muted)', fontWeight: (overdue || soon) ? 600 : 400 }}>
+                          {c.volgendContactmoment}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', opacity: 0.5 }}>geen datum</span>
+                    )}
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.naam}</div>
-                    {c.bedrijf && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.bedrijf}</div>}
-                  </div>
-                  <span style={{ fontSize: '0.68rem', padding: '1px 7px', borderRadius: '20px', background: 'var(--color-surface-muted)', color: 'var(--color-text-muted)', flexShrink: 0, textTransform: 'capitalize' }}>
-                    {c.categorie}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </Panel>
