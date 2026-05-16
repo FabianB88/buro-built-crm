@@ -11,6 +11,7 @@ import Taken from './pages/Taken'
 import Notities from './pages/Notities'
 import Instellingen from './pages/Instellingen'
 import ContactDetail from './pages/ContactDetail'
+import MijnTaken from './pages/MijnTaken'
 
 function ProtectedApp() {
   return (
@@ -24,6 +25,7 @@ function ProtectedApp() {
         <Route path="/opdrachtgevers" element={<Opdrachtgevers />} />
         <Route path="/projecten" element={<Projecten />} />
         <Route path="/taken" element={<Taken />} />
+        <Route path="/mijn-taken" element={<MijnTaken />} />
         <Route path="/notities" element={<Notities />} />
         <Route path="/instellingen" element={<Instellingen />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

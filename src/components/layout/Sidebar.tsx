@@ -2,16 +2,17 @@ import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   LayoutDashboard, Users, Building2, Briefcase,
-  FolderKanban, CheckSquare, StickyNote, Settings, LogOut
+  FolderKanban, CheckSquare, StickyNote, Settings, LogOut, ListTodo
 } from 'lucide-react'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/mijn-taken', icon: ListTodo, label: 'Mijn taken' },
   { to: '/contacten', icon: Users, label: 'Contacten' },
   { to: '/organisaties', icon: Building2, label: 'Organisaties' },
   { to: '/opdrachtgevers', icon: Briefcase, label: 'Opdrachtgevers' },
   { to: '/projecten', icon: FolderKanban, label: 'Projecten' },
-  { to: '/taken', icon: CheckSquare, label: 'Taken' },
+  { to: '/taken', icon: CheckSquare, label: 'Alle taken' },
   { to: '/notities', icon: StickyNote, label: 'Notities' },
 ]
 
@@ -49,35 +50,17 @@ export default function Sidebar() {
       zIndex: 50,
     }}>
       {/* Brand */}
-      <div style={{
-        padding: '0 1.25rem',
-        marginBottom: '1.75rem',
-      }}>
-        <div style={{
-          fontSize: '0.7rem',
-          fontWeight: 600,
-          color: 'var(--color-text-muted)',
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          marginBottom: '2px',
-        }}>HAN Academie</div>
-        <div style={{
-          fontSize: '1.05rem',
-          fontWeight: 700,
-          color: 'var(--color-primary)',
-          letterSpacing: '0.02em',
-        }}>Buro BUILT</div>
+      <div style={{ padding: '0 1.25rem', marginBottom: '1.75rem' }}>
+        <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '2px' }}>
+          HAN Academie
+        </div>
+        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.02em' }}>
+          Buro BUILT
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px',
-        padding: '0 0.75rem',
-        overflowY: 'auto',
-      }}>
+      <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 0.75rem', overflowY: 'auto' }}>
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -85,7 +68,7 @@ export default function Sidebar() {
             style={({ isActive }) => navLinkStyle(isActive)}
             onMouseEnter={e => {
               const el = e.currentTarget as HTMLAnchorElement
-              if (!el.classList.contains('active')) {
+              if (!el.getAttribute('aria-current')) {
                 el.style.background = 'var(--color-surface-muted)'
                 el.style.color = 'var(--color-primary)'
               }
@@ -109,32 +92,18 @@ export default function Sidebar() {
 
       {/* Settings */}
       <div style={{ padding: '0 0.75rem', marginBottom: '0.5rem' }}>
-        <NavLink
-          to="/instellingen"
-          style={({ isActive }) => navLinkStyle(isActive)}
-        >
+        <NavLink to="/instellingen" style={({ isActive }) => navLinkStyle(isActive)}>
           <Settings size={16} strokeWidth={1.75} />
           Instellingen
         </NavLink>
       </div>
 
       {/* User */}
-      <div style={{
-        padding: '0.875rem 1.25rem',
-        borderTop: '1px solid var(--color-border)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.625rem',
-      }}>
+      <div style={{ padding: '0.875rem 1.25rem', borderTop: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
         {profile?.fotoUrl ? (
           <img src={profile.fotoUrl} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
         ) : (
-          <div style={{
-            width: 30, height: 30, borderRadius: '50%',
-            background: 'var(--color-surface-muted)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)',
-          }}>
+          <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
             {(profile?.naam || 'G').charAt(0).toUpperCase()}
           </div>
         )}
@@ -142,7 +111,7 @@ export default function Sidebar() {
           <div style={{ fontSize: '0.78rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {profile?.naam || 'Gebruiker'}
           </div>
-          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
             {profile?.rol || 'member'}
           </div>
         </div>
