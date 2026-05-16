@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { subscribeProjects, addProject, updateProject, deleteProject } from '../services/projects'
-import { Project } from '../types'
+import { subscribeClients } from '../services/clients'
+import { subscribeAllowedUsers, AllowedUser } from '../services/allowedUsers'
+import { Project, Client } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -11,93 +13,96 @@ import Badge from '../components/ui/Badge'
 import EmptyState from '../components/ui/EmptyState'
 import PageHeader from '../components/ui/PageHeader'
 import SearchBar from '../components/ui/SearchBar'
-import { FolderKanban, Pencil, Trash2 } from 'lucide-react'
+import { FolderKanban, Pencil, Trash2, Plus, Users } from 'lucide-react'
 
 type StatusVariant = 'default' | 'success' | 'warning' | 'accent' | 'danger'
 
 const statusVariantMap: Record<Project['status'], StatusVariant> = {
-  concept: 'default',
-  actief: 'success',
-  'on-hold': 'warning',
-  afgerond: 'accent',
-  geannuleerd: 'danger',
+  concept: 'default', actief: 'success', 'on-hold': 'warning', afgerond: 'accent', geannuleerd: 'danger',
 }
-
 const statusLabels: Record<Project['status'], string> = {
-  concept: 'Concept',
-  actief: 'Actief',
-  'on-hold': 'On hold',
-  afgerond: 'Afgerond',
-  geannuleerd: 'Geannuleerd',
+  concept: 'Concept', actief: 'Actief', 'on-hold': 'On hold', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd',
 }
 
-const emptyForm = (): Omit<Project, 'id' | 'aangemaaktOp' | 'bijgewerktOp'> => ({
-  naam: '',
-  omschrijving: '',
-  status: 'concept',
-  opdrachtgeverId: '',
-  opdrachtgeverNaam: '',
-  startdatum: '',
-  einddatum: '',
-  locatie: '',
-  budget: '',
+type FormState = Omit<Project, 'id' | 'aangemaaktOp' | 'bijgewerktOp'>
+
+const emptyForm = (): FormState => ({
+  naam: '', omschrijving: '', status: 'concept',
+  opdrachtgeverId: '', opdrachtgeverNaam: '', teamleden: [],
+  startdatum: '', einddatum: '', locatie: '', budget: '',
 })
 
 export default function Projecten() {
   const { profile } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [users, setUsers] = useState<AllowedUser[]>([])
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('alle')
+  const [statusFilter, setStatusFilter] = useState('alle')
   const [showModal, setShowModal] = useState(false)
   const [editProject, setEditProject] = useState<Project | null>(null)
-  const [form, setForm] = useState(emptyForm())
+  const [form, setForm] = useState<FormState>(emptyForm())
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    return subscribeProjects(setProjects)
+    const unsubs = [
+      subscribeProjects(setProjects),
+      subscribeClients(setClients),
+      subscribeAllowedUsers(setUsers),
+    ]
+    return () => unsubs.forEach(u => u())
   }, [])
 
-  const filtered = projects.filter(p => {
+  const filtered = useMemo(() => projects.filter(p => {
     const matchSearch =
       p.naam.toLowerCase().includes(search.toLowerCase()) ||
       (p.opdrachtgeverNaam || '').toLowerCase().includes(search.toLowerCase()) ||
       (p.omschrijving || '').toLowerCase().includes(search.toLowerCase())
     const matchStatus = statusFilter === 'alle' || p.status === statusFilter
     return matchSearch && matchStatus
-  })
+  }), [projects, search, statusFilter])
 
   function openAdd() {
     setEditProject(null)
     setForm(emptyForm())
+    setError('')
     setShowModal(true)
   }
 
   function openEdit(p: Project) {
     setEditProject(p)
     setForm({
-      naam: p.naam,
-      omschrijving: p.omschrijving || '',
-      status: p.status,
-      opdrachtgeverId: p.opdrachtgeverId || '',
-      opdrachtgeverNaam: p.opdrachtgeverNaam || '',
-      startdatum: p.startdatum || '',
-      einddatum: p.einddatum || '',
-      locatie: p.locatie || '',
-      budget: p.budget || '',
+      naam: p.naam, omschrijving: p.omschrijving || '', status: p.status,
+      opdrachtgeverId: p.opdrachtgeverId || '', opdrachtgeverNaam: p.opdrachtgeverNaam || '',
+      teamleden: p.teamleden || [],
+      startdatum: p.startdatum || '', einddatum: p.einddatum || '',
+      locatie: p.locatie || '', budget: p.budget || '',
     })
+    setError('')
     setShowModal(true)
   }
 
-  function closeModal() {
-    setShowModal(false)
-    setEditProject(null)
+  function closeModal() { setShowModal(false); setEditProject(null) }
+
+  function pickClient(id: string) {
+    const c = clients.find(c => c.id === id)
+    setForm(f => ({ ...f, opdrachtgeverId: id, opdrachtgeverNaam: c?.naam || '' }))
+  }
+
+  function toggleTeamlid(email: string) {
+    setForm(f => {
+      const current = f.teamleden || []
+      const next = current.includes(email) ? current.filter(e => e !== email) : [...current, email]
+      return { ...f, teamleden: next }
+    })
   }
 
   async function handleSave() {
     if (!form.naam.trim()) return
     setSaving(true)
+    setError('')
     const now = Date.now()
     try {
       if (editProject?.id) {
@@ -106,6 +111,9 @@ export default function Projecten() {
         await addProject({ ...form, aangemaaktOp: now, bijgewerktOp: now })
       }
       closeModal()
+    } catch (e) {
+      console.error(e)
+      setError('Opslaan mislukt. Probeer het opnieuw.')
     } finally {
       setSaving(false)
     }
@@ -113,44 +121,40 @@ export default function Projecten() {
 
   async function handleDelete() {
     if (!deleteTarget?.id) return
-    setDeleting(true)
     try {
       await deleteProject(deleteTarget.id)
       setDeleteTarget(null)
-    } finally {
-      setDeleting(false)
+    } catch (e) {
+      console.error(e)
     }
   }
 
-  function field(key: keyof typeof form, value: string) {
-    setForm(f => ({ ...f, [key]: value }))
+  function emailToName(email: string) {
+    const u = users.find(u => u.email === email)
+    return u ? u.email.split('@')[0] : email.split('@')[0]
   }
+
+  const f = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm(prev => ({ ...prev, [key]: value }))
 
   return (
     <div>
       <PageHeader
         title="Projecten"
         subtitle={`${projects.length} project${projects.length !== 1 ? 'en' : ''}`}
-        action={<Button onClick={openAdd}>+ Nieuw project</Button>}
+        action={<Button onClick={openAdd}><Plus size={15} /> Nieuw project</Button>}
       />
 
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 220px' }}>
-          <SearchBar value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek projecten…" />
-        </div>
-        <div style={{ minWidth: 160 }}>
-          <Select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          >
-            <option value="alle">Alle statussen</option>
-            <option value="concept">Concept</option>
-            <option value="actief">Actief</option>
-            <option value="on-hold">On hold</option>
-            <option value="afgerond">Afgerond</option>
-            <option value="geannuleerd">Geannuleerd</option>
-          </Select>
-        </div>
+        <SearchBar value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoek projecten…" style={{ flex: '1 1 220px' }} />
+        <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ minWidth: 160 }}>
+          <option value="alle">Alle statussen</option>
+          <option value="concept">Concept</option>
+          <option value="actief">Actief</option>
+          <option value="on-hold">On hold</option>
+          <option value="afgerond">Afgerond</option>
+          <option value="geannuleerd">Geannuleerd</option>
+        </Select>
       </div>
 
       {filtered.length === 0 ? (
@@ -158,31 +162,17 @@ export default function Projecten() {
           icon={FolderKanban}
           title="Geen projecten gevonden"
           description={search || statusFilter !== 'alle' ? 'Pas je filters aan.' : 'Voeg je eerste project toe.'}
-          action={<Button onClick={openAdd}>+ Nieuw project</Button>}
+          action={!search && statusFilter === 'alle' ? <Button onClick={openAdd}><Plus size={15} /> Nieuw project</Button> : undefined}
         />
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: '1rem',
-        }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
           {filtered.map(p => (
             <div
               key={p.id}
-              style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: '10px',
-                padding: '1.25rem',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.625rem',
-              }}
+              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
-                <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--color-primary)', flex: 1 }}>
-                  {p.naam}
-                </span>
+                <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--color-primary)', flex: 1 }}>{p.naam}</span>
                 <Badge variant={statusVariantMap[p.status]}>{statusLabels[p.status]}</Badge>
               </div>
 
@@ -199,27 +189,38 @@ export default function Projecten() {
               )}
 
               {p.omschrijving && (
-                <div style={{
-                  fontSize: '0.82rem',
-                  color: 'var(--color-text-muted)',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {p.omschrijving}
                 </div>
               )}
 
+              {(p.teamleden || []).length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  <Users size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                  {(p.teamleden || []).map(email => (
+                    <span key={email} title={emailToName(email)} style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 24, height: 24, borderRadius: '50%',
+                      background: email === profile?.email ? 'var(--color-primary)' : 'var(--color-surface-muted)',
+                      color: email === profile?.email ? '#fff' : 'var(--color-text-muted)',
+                      fontSize: '0.65rem', fontWeight: 600,
+                    }}>
+                      {emailToName(email).charAt(0).toUpperCase()}
+                    </span>
+                  ))}
+                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                    {(p.teamleden || []).map(emailToName).join(', ')}
+                  </span>
+                </div>
+              )}
+
+              {p.budget && (
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Budget: {p.budget}</div>
+              )}
+
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.5rem', borderTop: '1px solid var(--color-border)' }}>
-                <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
-                  <Pencil size={14} style={{ marginRight: '4px' }} />
-                  Bewerk
-                </Button>
-                <Button variant="danger" size="sm" onClick={() => setDeleteTarget(p)}>
-                  <Trash2 size={14} style={{ marginRight: '4px' }} />
-                  Verwijder
-                </Button>
+                <Button variant="ghost" size="sm" onClick={() => openEdit(p)}><Pencil size={14} /> Bewerk</Button>
+                <Button variant="danger" size="sm" onClick={() => setDeleteTarget(p)}><Trash2 size={14} /> Verwijder</Button>
               </div>
             </div>
           ))}
@@ -230,7 +231,7 @@ export default function Projecten() {
         open={showModal}
         onClose={closeModal}
         title={editProject ? 'Project bewerken' : 'Nieuw project'}
-        width={500}
+        width={520}
         footer={
           <>
             <Button variant="ghost" onClick={closeModal}>Annuleer</Button>
@@ -240,62 +241,65 @@ export default function Projecten() {
           </>
         }
       >
-        <Input
-          label="Naam *"
-          value={form.naam}
-          onChange={e => field('naam', e.target.value)}
-          placeholder="Projectnaam"
-        />
-        <Select
-          label="Status"
-          value={form.status}
-          onChange={e => field('status', e.target.value as Project['status'])}
-        >
-          <option value="concept">Concept</option>
-          <option value="actief">Actief</option>
-          <option value="on-hold">On hold</option>
-          <option value="afgerond">Afgerond</option>
-          <option value="geannuleerd">Geannuleerd</option>
-        </Select>
-        <Input
-          label="Opdrachtgever"
-          value={form.opdrachtgeverNaam}
-          onChange={e => field('opdrachtgeverNaam', e.target.value)}
-          placeholder="Naam opdrachtgever"
-        />
+        {error && (
+          <div style={{ padding: '0.625rem 0.875rem', background: '#fde8e8', border: '1px solid #f5c0c0', borderRadius: '7px', fontSize: '0.82rem', color: 'var(--color-danger)' }}>
+            {error}
+          </div>
+        )}
+        <Input label="Naam *" value={form.naam} onChange={e => f('naam', e.target.value)} placeholder="Projectnaam" />
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-          <Input
-            label="Startdatum"
-            type="date"
-            value={form.startdatum}
-            onChange={e => field('startdatum', e.target.value)}
-          />
-          <Input
-            label="Einddatum"
-            type="date"
-            value={form.einddatum}
-            onChange={e => field('einddatum', e.target.value)}
-          />
+          <Select label="Status" value={form.status} onChange={e => f('status', e.target.value as Project['status'])}>
+            <option value="concept">Concept</option>
+            <option value="actief">Actief</option>
+            <option value="on-hold">On hold</option>
+            <option value="afgerond">Afgerond</option>
+            <option value="geannuleerd">Geannuleerd</option>
+          </Select>
+          <Select label="Opdrachtgever" value={form.opdrachtgeverId as string} onChange={e => pickClient(e.target.value)}>
+            <option value="">— Geen —</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.naam}</option>)}
+          </Select>
         </div>
-        <Input
-          label="Locatie"
-          value={form.locatie}
-          onChange={e => field('locatie', e.target.value)}
-          placeholder="Locatie"
-        />
-        <Input
-          label="Budget"
-          value={form.budget}
-          onChange={e => field('budget', e.target.value)}
-          placeholder="€ Budget"
-        />
-        <Textarea
-          label="Omschrijving"
-          value={form.omschrijving}
-          onChange={e => field('omschrijving', e.target.value)}
-          placeholder="Korte omschrijving van het project"
-          rows={3}
-        />
+
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+            Team
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {users.map(u => {
+              const selected = (form.teamleden || []).includes(u.email)
+              return (
+                <button
+                  key={u.email}
+                  onClick={() => toggleTeamlid(u.email)}
+                  style={{
+                    padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem',
+                    cursor: 'pointer', border: '1.5px solid',
+                    borderColor: selected ? 'var(--color-primary)' : 'var(--color-border)',
+                    background: selected ? 'var(--color-primary)' : 'transparent',
+                    color: selected ? '#fff' : 'var(--color-text-muted)',
+                    fontWeight: selected ? 600 : 400,
+                  }}
+                >
+                  {u.email.split('@')[0]}{u.email === profile?.email ? ' (jij)' : ''}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <Input label="Startdatum" type="date" value={form.startdatum as string} onChange={e => f('startdatum', e.target.value)} />
+          <Input label="Einddatum" type="date" value={form.einddatum as string} onChange={e => f('einddatum', e.target.value)} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <Input label="Locatie" value={form.locatie as string} onChange={e => f('locatie', e.target.value)} placeholder="Locatie" />
+          <Input label="Budget" value={form.budget as string} onChange={e => f('budget', e.target.value)} placeholder="€ Budget" />
+        </div>
+
+        <Textarea label="Omschrijving" value={form.omschrijving as string} onChange={e => f('omschrijving', e.target.value)} placeholder="Korte omschrijving van het project" rows={3} />
       </Modal>
 
       <Modal
@@ -305,9 +309,7 @@ export default function Projecten() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Annuleer</Button>
-            <Button variant="danger" onClick={handleDelete} disabled={deleting}>
-              {deleting ? 'Verwijderen…' : 'Verwijder'}
-            </Button>
+            <Button variant="danger" onClick={handleDelete}>Verwijder</Button>
           </>
         }
       >
