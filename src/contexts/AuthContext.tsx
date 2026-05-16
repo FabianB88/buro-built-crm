@@ -34,59 +34,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const email = (u.email || '').toLowerCase()
+      try {
+        const email = (u.email || '').toLowerCase()
 
-      // Bootstrap: first admin via env var
-      if (BOOTSTRAP_EMAIL && email === BOOTSTRAP_EMAIL) {
-        const existing = await isEmailAllowed(email)
-        if (!existing) {
-          await addAllowedUser({
-            email,
-            rol: 'admin',
-            toegevoegdDoor: 'systeem',
-            toegevoegdOp: Date.now(),
-          })
+        // Bootstrap: first admin via env var
+        if (BOOTSTRAP_EMAIL && email === BOOTSTRAP_EMAIL) {
+          const existing = await isEmailAllowed(email)
+          if (!existing) {
+            await addAllowedUser({
+              email,
+              rol: 'admin',
+              toegevoegdDoor: 'systeem',
+              toegevoegdOp: Date.now(),
+            })
+          }
         }
-      }
 
-      // Check if email is on the allowlist
-      const allowed = await isEmailAllowed(email)
-      if (!allowed) {
-        await signOut(auth)
+        // Check if email is on the allowlist
+        const allowed = await isEmailAllowed(email)
+        if (!allowed) {
+          await signOut(auth)
+          setUser(null)
+          setProfile(null)
+          setAccessDenied(true)
+          setLoading(false)
+          return
+        }
+
+        // Allowed — load or create user profile
+        setAccessDenied(false)
+        const ref = doc(db, 'users', u.uid)
+        const snap = await getDoc(ref)
+        if (!snap.exists()) {
+          const newProfile: UserProfile = {
+            uid: u.uid,
+            naam: u.displayName || email,
+            email,
+            fotoUrl: u.photoURL || undefined,
+            rol: allowed.rol,
+            aangemaaktOp: Date.now(),
+          }
+          await setDoc(ref, newProfile)
+          setProfile(newProfile)
+        } else {
+          const data = snap.data() as UserProfile
+          if (data.rol !== allowed.rol) {
+            await setDoc(ref, { rol: allowed.rol }, { merge: true })
+            data.rol = allowed.rol
+          }
+          setProfile(data)
+        }
+
+        setUser(u)
+        setLoading(false)
+      } catch (err) {
+        console.error('Auth init error:', err)
+        // Always resolve loading so the app doesn't hang
+        await signOut(auth).catch(() => {})
         setUser(null)
         setProfile(null)
-        setAccessDenied(true)
+        setAccessDenied(false)
         setLoading(false)
-        return
       }
-
-      // Allowed — load or create user profile
-      setAccessDenied(false)
-      const ref = doc(db, 'users', u.uid)
-      const snap = await getDoc(ref)
-      if (!snap.exists()) {
-        const newProfile: UserProfile = {
-          uid: u.uid,
-          naam: u.displayName || email,
-          email,
-          fotoUrl: u.photoURL || undefined,
-          rol: allowed.rol,
-          aangemaaktOp: Date.now(),
-        }
-        await setDoc(ref, newProfile)
-        setProfile(newProfile)
-      } else {
-        // Sync role from allowedUsers in case it changed
-        const data = snap.data() as UserProfile
-        if (data.rol !== allowed.rol) {
-          await setDoc(ref, { rol: allowed.rol }, { merge: true })
-          data.rol = allowed.rol
-        }
-        setProfile(data)
-      }
-
-      setUser(u)
-      setLoading(false)
     })
     return unsub
   }, [])
