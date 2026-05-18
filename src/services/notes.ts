@@ -1,5 +1,5 @@
 import {
-  collection, addDoc, deleteDoc,
+  collection, addDoc, updateDoc, deleteDoc,
   doc, onSnapshot, query, orderBy, Unsubscribe
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -17,6 +17,10 @@ export function subscribeNotes(cb: (items: Note[]) => void): Unsubscribe {
 export async function addNote(data: Omit<Note, 'id'>): Promise<string> {
   const ref = await addDoc(collection(db, COL), data);
   return ref.id;
+}
+
+export async function updateNote(id: string, data: Partial<Note>): Promise<void> {
+  await updateDoc(doc(db, COL, id), data);
 }
 
 export async function deleteNote(id: string): Promise<void> {

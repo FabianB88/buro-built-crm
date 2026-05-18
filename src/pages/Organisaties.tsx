@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2, Building2, Mail } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Building2, Mail, Eye } from 'lucide-react'
 import { subscribeOrganizations, addOrganization, updateOrganization, deleteOrganization } from '../services/organizations'
 import { Organization } from '../types'
 import Button from '../components/ui/Button'
@@ -22,6 +23,7 @@ const emptyForm: FormState = {
 }
 
 export default function Organisaties() {
+  const navigate = useNavigate()
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -127,6 +129,7 @@ export default function Organisaties() {
                   <td style={{ padding: '0.75rem 1rem', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>{o.regio || '—'}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/organisaties/${o.id}`)}><Eye size={13} /></Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(o)}><Pencil size={13} /></Button>
                       <Button variant="danger" size="sm" onClick={() => setDeleteId(o.id!)}><Trash2 size={13} /></Button>
                     </div>

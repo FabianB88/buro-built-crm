@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2, Briefcase, Mail } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Briefcase, Mail, Eye } from 'lucide-react'
 import { subscribeClients, addClient, updateClient, deleteClient } from '../services/clients'
 import { Client } from '../types'
 import Button from '../components/ui/Button'
@@ -28,6 +29,7 @@ const STATUS_BADGE: Record<string, 'success' | 'accent' | 'default'> = {
 }
 
 export default function Opdrachtgevers() {
+  const navigate = useNavigate()
   const [clients, setClients] = useState<Client[]>([])
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -133,6 +135,7 @@ export default function Opdrachtgevers() {
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/opdrachtgevers/${c.id}`)}><Eye size={13} /></Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(c)}><Pencil size={13} /></Button>
                       <Button variant="danger" size="sm" onClick={() => setDeleteId(c.id!)}><Trash2 size={13} /></Button>
                     </div>

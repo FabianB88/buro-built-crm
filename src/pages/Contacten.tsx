@@ -3,7 +3,8 @@ import * as XLSX from 'xlsx'
 import { subscribeContacts, addContact, updateContact, deleteContact } from '../services/contacts'
 import { addTask } from '../services/tasks'
 import { subscribeAllowedUsers, AllowedUser } from '../services/allowedUsers'
-import { Contact } from '../types'
+import { subscribeOrganizations } from '../services/organizations'
+import { Contact, Organization } from '../types'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
@@ -117,6 +118,7 @@ type FormState = Omit<Contact, 'id' | 'aangemaaktOp' | 'bijgewerktOp'>
 const emptyForm = (): FormState => ({
   naam: '', email: '', telefoon: '', bedrijf: '', functie: '',
   categorie: 'klant', tags: [], website: '', branche: '', regio: '', notitie: '',
+  organisatieId: '', organisatieNaam: '',
   accountManager: '', accountManagerNaam: '', volgendContactmoment: '',
 })
 
@@ -185,6 +187,7 @@ export default function Contacten() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [users, setUsers] = useState<AllowedUser[]>([])
+  const [organisations, setOrganisations] = useState<Organization[]>([])
   const [maakFollowUp, setMaakFollowUp] = useState(true)
 
   // Import state
@@ -195,6 +198,7 @@ export default function Contacten() {
 
   useEffect(() => subscribeContacts(setContacts), [])
   useEffect(() => subscribeAllowedUsers(setUsers), [])
+  useEffect(() => subscribeOrganizations(setOrganisations), [])
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
@@ -234,6 +238,8 @@ export default function Contacten() {
       accountManager: c.accountManager || '',
       accountManagerNaam: c.accountManagerNaam || '',
       volgendContactmoment: c.volgendContactmoment || '',
+      organisatieId: c.organisatieId || '',
+      organisatieNaam: c.organisatieNaam || '',
     })
     setError('')
     setMaakFollowUp(false)
@@ -489,6 +495,18 @@ export default function Contacten() {
           <Input label="E-mail" value={form.email} onChange={e => f('email', e.target.value)} type="email" placeholder="naam@bedrijf.nl" />
           <Input label="Telefoon" value={form.telefoon as string} onChange={e => f('telefoon', e.target.value)} placeholder="+31 6 ..." />
           <Input label="Bedrijf" value={form.bedrijf as string} onChange={e => f('bedrijf', e.target.value)} placeholder="Bedrijfsnaam" />
+          <Select
+            label="Organisatie koppelen"
+            value={form.organisatieId as string}
+            onChange={e => {
+              const org = organisations.find(o => o.id === e.target.value)
+              f('organisatieId', e.target.value)
+              f('organisatieNaam', org?.naam || '')
+            }}
+          >
+            <option value="">— Geen organisatie —</option>
+            {organisations.map(o => <option key={o.id} value={o.id}>{o.naam}</option>)}
+          </Select>
           <Input label="Functie" value={form.functie as string} onChange={e => f('functie', e.target.value)} placeholder="Functietitel" />
           <Select label="Categorie" value={form.categorie} onChange={e => f('categorie', e.target.value as Contact['categorie'])}>
             <option value="klant">Klant</option>

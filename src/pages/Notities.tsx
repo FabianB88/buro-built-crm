@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { subscribeNotes, addNote, deleteNote } from '../services/notes'
+import { subscribeNotes, addNote, updateNote, deleteNote } from '../services/notes'
 import { subscribeContacts } from '../services/contacts'
 import { subscribeProjects } from '../services/projects'
 import { Note, Contact, Project } from '../types'
@@ -11,7 +11,7 @@ import Modal from '../components/ui/Modal'
 import EmptyState from '../components/ui/EmptyState'
 import PageHeader from '../components/ui/PageHeader'
 import SearchBar from '../components/ui/SearchBar'
-import { StickyNote, Trash2, Plus } from 'lucide-react'
+import { StickyNote, Trash2, Plus, Pencil } from 'lucide-react'
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -32,6 +32,9 @@ export default function Notities() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Note | null>(null)
+  const [editTarget, setEditTarget] = useState<Note | null>(null)
+  const [editTekst, setEditTekst] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     const unsubs = [
@@ -94,6 +97,24 @@ export default function Notities() {
       setDeleteTarget(null)
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  function openEdit(n: Note) {
+    setEditTarget(n)
+    setEditTekst(n.tekst)
+  }
+
+  async function handleEditSave() {
+    if (!editTarget?.id || !editTekst.trim()) return
+    setEditSaving(true)
+    try {
+      await updateNote(editTarget.id, { tekst: editTekst.trim() })
+      setEditTarget(null)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -163,7 +184,10 @@ export default function Notities() {
                     <span style={{ fontWeight: 500 }}>{n.auteur}</span>
                     {' · '}{formatDate(n.aangemaaktOp)}
                   </div>
-                  <Button variant="danger" size="sm" onClick={() => setDeleteTarget(n)}><Trash2 size={13} /></Button>
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(n)}><Pencil size={13} /></Button>
+                    <Button variant="danger" size="sm" onClick={() => setDeleteTarget(n)}><Trash2 size={13} /></Button>
+                  </div>
                 </div>
               </div>
             )
@@ -202,6 +226,23 @@ export default function Notities() {
         <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
           Auteur: <strong>{profile?.naam || 'Onbekend'}</strong>
         </div>
+      </Modal>
+
+      <Modal
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        title="Notitie bewerken"
+        width={460}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditTarget(null)}>Annuleer</Button>
+            <Button onClick={handleEditSave} disabled={editSaving || !editTekst.trim()}>
+              {editSaving ? 'Opslaan…' : 'Opslaan'}
+            </Button>
+          </>
+        }
+      >
+        <Textarea label="Notitie *" value={editTekst} onChange={e => setEditTekst(e.target.value)} rows={6} autoFocus />
       </Modal>
 
       <Modal

@@ -12,6 +12,9 @@ import Notities from './pages/Notities'
 import Instellingen from './pages/Instellingen'
 import ContactDetail from './pages/ContactDetail'
 import MijnTaken from './pages/MijnTaken'
+import ProjectDetail from './pages/ProjectDetail'
+import OpdrachtgeverDetail from './pages/OpdrachtgeverDetail'
+import OrganisatieDetail from './pages/OrganisatieDetail'
 
 function ProtectedApp() {
   return (
@@ -22,8 +25,11 @@ function ProtectedApp() {
         <Route path="/contacten" element={<Contacten />} />
         <Route path="/contacten/:id" element={<ContactDetail />} />
         <Route path="/organisaties" element={<Organisaties />} />
+        <Route path="/organisaties/:id" element={<OrganisatieDetail />} />
         <Route path="/opdrachtgevers" element={<Opdrachtgevers />} />
+        <Route path="/opdrachtgevers/:id" element={<OpdrachtgeverDetail />} />
         <Route path="/projecten" element={<Projecten />} />
+        <Route path="/projecten/:id" element={<ProjectDetail />} />
         <Route path="/taken" element={<Taken />} />
         <Route path="/mijn-taken" element={<MijnTaken />} />
         <Route path="/notities" element={<Notities />} />

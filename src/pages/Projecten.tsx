@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { subscribeProjects, addProject, updateProject, deleteProject } from '../services/projects'
 import { subscribeClients } from '../services/clients'
 import { subscribeAllowedUsers, AllowedUser } from '../services/allowedUsers'
@@ -13,7 +14,7 @@ import Badge from '../components/ui/Badge'
 import EmptyState from '../components/ui/EmptyState'
 import PageHeader from '../components/ui/PageHeader'
 import SearchBar from '../components/ui/SearchBar'
-import { FolderKanban, Pencil, Trash2, Plus, Users } from 'lucide-react'
+import { FolderKanban, Pencil, Trash2, Plus, Users, Eye } from 'lucide-react'
 
 type StatusVariant = 'default' | 'success' | 'warning' | 'accent' | 'danger'
 
@@ -34,6 +35,7 @@ const emptyForm = (): FormState => ({
 
 export default function Projecten() {
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [users, setUsers] = useState<AllowedUser[]>([])
@@ -219,8 +221,9 @@ export default function Projecten() {
               )}
 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.5rem', borderTop: '1px solid var(--color-border)' }}>
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/projecten/${p.id}`)}><Eye size={14} /> Detail</Button>
                 <Button variant="ghost" size="sm" onClick={() => openEdit(p)}><Pencil size={14} /> Bewerk</Button>
-                <Button variant="danger" size="sm" onClick={() => setDeleteTarget(p)}><Trash2 size={14} /> Verwijder</Button>
+                <Button variant="danger" size="sm" onClick={() => setDeleteTarget(p)}><Trash2 size={14} /></Button>
               </div>
             </div>
           ))}

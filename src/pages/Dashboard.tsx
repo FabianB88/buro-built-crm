@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { subscribeContacts } from '../services/contacts'
 import { subscribeProjects } from '../services/projects'
 import { subscribeTasks, updateTask } from '../services/tasks'
 import { subscribeClients } from '../services/clients'
-import { Contact, Project, Task, Client } from '../types'
+import { subscribeNotes } from '../services/notes'
+import { Contact, Project, Task, Client, Note } from '../types'
 import { useAuth } from '../contexts/AuthContext'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Users, FolderKanban, CheckSquare, Briefcase, ArrowRight, AlertCircle, Calendar } from 'lucide-react'
+import { Users, FolderKanban, CheckSquare, Briefcase, ArrowRight, AlertCircle, Calendar, Activity, StickyNote } from 'lucide-react'
 import Badge from '../components/ui/Badge'
 
 const PRIO_COLOR: Record<string, string> = {
@@ -62,6 +63,7 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [notes, setNotes] = useState<Note[]>([])
 
   useEffect(() => {
     const unsubs = [
@@ -69,6 +71,7 @@ export default function Dashboard() {
       subscribeProjects(setProjects),
       subscribeTasks(setTasks),
       subscribeClients(setClients),
+      subscribeNotes(setNotes),
     ]
     return () => unsubs.forEach(u => u())
   }, [])
@@ -110,6 +113,36 @@ export default function Dashboard() {
   const hour = now.getHours()
   const greeting = hour < 12 ? 'Goedemorgen' : hour < 18 ? 'Goedemiddag' : 'Goedenavond'
   const firstName = (profile?.naam || '').split(' ')[0]
+
+  // Activity feed — recent items across all collections
+  type ActivityItem = { key: string; type: 'contact' | 'project' | 'task' | 'note' | 'client'; label: string; sub?: string; ts: number; to?: string }
+  const recentActivity = useMemo((): ActivityItem[] => {
+    const items: ActivityItem[] = [
+      ...contacts.map(c => ({ key: `c-${c.id}`, type: 'contact' as const, label: c.naam, sub: c.bedrijf, ts: c.bijgewerktOp, to: `/contacten/${c.id}` })),
+      ...projects.map(p => ({ key: `p-${p.id}`, type: 'project' as const, label: p.naam, sub: p.opdrachtgeverNaam, ts: p.bijgewerktOp, to: `/projecten/${p.id}` })),
+      ...tasks.map(t => ({ key: `t-${t.id}`, type: 'task' as const, label: t.titel, sub: t.projectNaam || t.contactNaam, ts: t.bijgewerktOp, to: '/taken' })),
+      ...clients.map(cl => ({ key: `cl-${cl.id}`, type: 'client' as const, label: cl.naam, sub: cl.sector, ts: cl.bijgewerktOp, to: `/opdrachtgevers/${cl.id}` })),
+      ...notes.map(n => ({ key: `n-${n.id}`, type: 'note' as const, label: n.tekst.slice(0, 60) + (n.tekst.length > 60 ? '…' : ''), sub: n.contactNaam || n.projectNaam, ts: n.aangemaaktOp, to: '/notities' })),
+    ]
+    return items.sort((a, b) => b.ts - a.ts).slice(0, 12)
+  }, [contacts, projects, tasks, clients, notes])
+
+  const ACTIVITY_ICON: Record<string, React.ElementType> = { contact: Users, project: FolderKanban, task: CheckSquare, note: StickyNote, client: Briefcase }
+  const ACTIVITY_COLOR: Record<string, string> = { contact: 'var(--color-primary)', project: 'var(--color-success)', task: '#7c6a5e', note: '#b98a3e', client: 'var(--color-accent)' }
+  const ACTIVITY_LABEL: Record<string, string> = { contact: 'Contact', project: 'Project', task: 'Taak', note: 'Notitie', client: 'Opdrachtgever' }
+
+  function fmtRelative(ts: number): string {
+    const diff = Date.now() - ts
+    const min = Math.floor(diff / 60000)
+    if (min < 1) return 'zojuist'
+    if (min < 60) return `${min}m geleden`
+    const hr = Math.floor(min / 60)
+    if (hr < 24) return `${hr}u geleden`
+    const d = Math.floor(hr / 24)
+    if (d === 1) return 'gisteren'
+    if (d < 7) return `${d} dagen geleden`
+    return new Date(ts).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+  }
 
   async function toggleTask(t: Task) {
     if (!t.id) return
@@ -294,6 +327,41 @@ export default function Dashboard() {
           )}
         </Panel>
       </div>
+
+      {/* Activiteitenfeed */}
+      {recentActivity.length > 0 && (
+        <div style={{ marginTop: '1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <Activity size={16} style={{ color: 'var(--color-text-muted)' }} />
+            <h2 style={{ fontSize: '0.875rem', fontWeight: 600, margin: 0 }}>Recente activiteit</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.375rem' }}>
+            {recentActivity.map(item => {
+              const Icon = ACTIVITY_ICON[item.type]
+              return (
+                <div
+                  key={item.key}
+                  onClick={() => item.to && navigate(item.to)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.625rem', borderRadius: '7px', cursor: item.to ? 'pointer' : 'default', transition: 'background 0.1s' }}
+                  onMouseEnter={e => item.to && (e.currentTarget.style.background = 'var(--color-background)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div style={{ width: 28, height: 28, borderRadius: '7px', background: ACTIVITY_COLOR[item.type] + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon size={13} style={{ color: ACTIVITY_COLOR[item.type] }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                      {ACTIVITY_LABEL[item.type]}{item.sub ? ` · ${item.sub}` : ''}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtRelative(item.ts)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
